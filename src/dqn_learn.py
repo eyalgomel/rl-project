@@ -117,14 +117,20 @@ def dqn_learing(
         if sample > eps_threshold:
             obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
             # Use volatile = True if variable is only used in inference mode, i.e. don’t save the history
-            return model(Variable(obs, volatile=True)).data.max(1)[1].cpu()
+            with torch.no_grad():
+                return model(Variable(obs)).data.max(1)[1].cpu()
         else:
             return torch.IntTensor([[random.randrange(num_actions)]])
 
     # Initialize target q function and q function, i.e. build the model.
     ######
 
-    # YOUR CODE HERE
+    Q = q_func(input_arg, num_actions).type(dtype)
+    target_Q = q_func(input_arg, num_actions).type(dtype)
+
+    if USE_CUDA:
+        Q = Q.cuda()
+        target_Q = target_Q.cuda()
 
     ######
 
@@ -180,7 +186,18 @@ def dqn_learing(
         # might as well be random, since you haven't trained your net...)
         #####
 
-        # YOUR CODE HERE
+        idx = replay_buffer.store_frame(last_obs)
+        enc_obs = replay_buffer.encode_recent_observation()
+
+        action = select_epilson_greedy_action(Q, enc_obs, t)
+
+        obs, reward, done, info = env.step(action)
+        if done:
+            obs = env.reset()
+
+        replay_buffer.store_effect(idx, action, reward, done)
+
+        last_obs = obs
 
         #####
 
@@ -218,8 +235,43 @@ def dqn_learing(
             #      variable num_param_updates useful for this (it was initialized to 0)
             #####
 
-            pass
+            #3.a
+            obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
+            obs_batch = Variable(torch.from_numpy(obs_batch).type(dtype) / 255.)
+            act_batch = Variable(torch.from_numpy(act_batch).type(torch.int64))
+            rew_batch = Variable(torch.from_numpy(rew_batch).type(torch.int64))
+            next_obs_batch = Variable(torch.from_numpy(next_obs_batch).type(dtype) / 255.)
+            done_mask = Variable(torch.from_numpy(done_mask).type(torch.int64))
 
+            if USE_CUDA:
+                obs_batch = obs_batch.cuda()
+                act_batch = act_batch.cuda()
+                rew_batch = rew_batch.cuda()
+                next_obs_batch = next_obs_batch.cuda()
+                done_mask = done_mask.cuda()
+
+            # Q network
+            val = Q(obs_batch)
+            val = val.gather(dim=1, index=act_batch.unsqueeze(1))
+
+            # Q target network
+            tar_val = target_Q(next_obs_batch)
+            with torch.no_grad():
+                tar_val = tar_val.max(1)[0]
+                tar_val = torch.addcmul(rew_batch.type(dtype),gamma, 1-done_mask.type(dtype), tar_val)
+
+            # 3.b MSE
+            d_error = torch.pow(tar_val - val.squeeze(),2).clamp_(-1,1) * -1
+
+            # 3.c train Q network
+            optimizer.zero_grad()
+            val.backward(d_error.data.unsqueeze(1))
+            optimizer.step()
+
+            # 3.d update target network
+            if num_param_updates % target_update_freq == 0:
+                target_Q.load_state_dict(Q.state_dict())
+                num_param_updates += 1
             #####
 
         ### 4. Log progress and keep track of statistics
