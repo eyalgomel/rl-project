@@ -16,6 +16,7 @@ import torch.autograd as autograd
 
 from utils.replay_buffer import ReplayBuffer
 from utils.gym import get_wrapper_by_name
+from time import time
 
 USE_CUDA = torch.cuda.is_available()
 print (f"use cuda:{USE_CUDA}")
@@ -26,6 +27,14 @@ class Variable(autograd.Variable):
         if USE_CUDA:
             data = data.cuda()
         super(Variable, self).__init__(data, *args, **kwargs)
+
+def run_in_colab_message():
+    try:
+        import pyfiglet
+        ascii_banner = pyfiglet.figlet_format("RUN ON COLAB")
+        print(ascii_banner)
+    except:
+        print ("RUN ON COLAB")
 
 """
     OptimizerSpec containing following attributes
@@ -149,6 +158,29 @@ def dqn_learing(
     best_mean_episode_reward = -float('inf')
     last_obs = env.reset()
     LOG_EVERY_N_STEPS = 10000
+    # Google Drive
+    try:
+        import google.colab
+        IN_COLAB = True
+    except:
+        IN_COLAB = False
+
+    if IN_COLAB:
+        run_in_colab_message()
+        from google.colab import auth
+        import logging
+        from pydrive.auth import GoogleAuth
+        from pydrive.drive import GoogleDrive
+        from oauth2client.client import GoogleCredentials
+        logging.getLogger('googleapicliet.discovery_cache').setLevel(logging.ERROR)
+        auth.authenticate_user()
+        gauth = GoogleAuth()
+        gauth.credentials = GoogleCredentials.get_application_default()
+        drive = GoogleDrive(gauth)
+        create_file = True
+        upload_to_drive_count = 0
+
+    iter_time = time()
 
     for t in count():
         ### 1. Check stopping criterion
@@ -189,7 +221,11 @@ def dqn_learing(
         idx = replay_buffer.store_frame(last_obs)
         enc_obs = replay_buffer.encode_recent_observation()
 
-        action = select_epilson_greedy_action(Q, enc_obs, t)
+        if t > learning_starts:
+            action = select_epilson_greedy_action(Q, enc_obs, t)
+        else:
+            action = torch.IntTensor([[random.randrange(num_actions)]])
+
 
         obs, reward, done, info = env.step(action)
         if done:
@@ -237,10 +273,10 @@ def dqn_learing(
 
             #3.a
             obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
-            obs_batch = Variable(torch.from_numpy(obs_batch).type(dtype) / 255.)
+            obs_batch = Variable(torch.from_numpy(obs_batch).type(dtype) / 255., requires_grad=True)
             act_batch = Variable(torch.from_numpy(act_batch).type(torch.int64))
-            rew_batch = Variable(torch.from_numpy(rew_batch).type(torch.int64))
-            next_obs_batch = Variable(torch.from_numpy(next_obs_batch).type(dtype) / 255.)
+            rew_batch = Variable(torch.from_numpy(rew_batch).type(dtype), requires_grad=True)
+            next_obs_batch = Variable(torch.from_numpy(next_obs_batch).type(dtype) / 255., requires_grad=True)
             done_mask = Variable(torch.from_numpy(done_mask).type(torch.int64))
 
             if USE_CUDA:
@@ -251,17 +287,16 @@ def dqn_learing(
                 done_mask = done_mask.cuda()
 
             # Q network
-            val = Q(obs_batch)
-            val = val.gather(dim=1, index=act_batch.unsqueeze(1))
+            val = Q(obs_batch).gather(dim=1, index=act_batch.unsqueeze(1))
 
             # Q target network
-            tar_val = target_Q(next_obs_batch)
             with torch.no_grad():
-                tar_val = tar_val.max(1)[0]
-                tar_val = torch.addcmul(rew_batch.type(dtype),gamma, 1-done_mask.type(dtype), tar_val)
+                tar_val_t = target_Q(next_obs_batch).max(1)[0]
+            tar_val = torch.addcmul(rew_batch, gamma, 1-done_mask.type(dtype), tar_val_t)
 
-            # 3.b MSE
-            d_error = torch.pow(tar_val - val.squeeze(),2).clamp_(-1,1) * -1
+            # 3.b error calculate
+            d_error = (tar_val - val.squeeze()).clamp_(-1, 1) * -1.
+            # d_error = torch.pow((tar_val - val.squeeze()).clamp_(-1, 1), 2) * -1.
 
             # 3.c train Q network
             optimizer.zero_grad()
@@ -269,9 +304,9 @@ def dqn_learing(
             optimizer.step()
 
             # 3.d update target network
+            num_param_updates += 1
             if num_param_updates % target_update_freq == 0:
                 target_Q.load_state_dict(Q.state_dict())
-                num_param_updates += 1
             #####
 
         ### 4. Log progress and keep track of statistics
@@ -286,6 +321,8 @@ def dqn_learing(
 
         if t % LOG_EVERY_N_STEPS == 0 and t > learning_starts:
             print("Timestep %d" % (t,))
+            print(f"Iteration time:{time()-iter_time:.2f}")
+            iter_time = time()
             print("mean reward (100 episodes) %f" % mean_episode_reward)
             print("best mean reward %f" % best_mean_episode_reward)
             print("episodes %d" % len(episode_rewards))
@@ -293,6 +330,20 @@ def dqn_learing(
             sys.stdout.flush()
 
             # Dump statistics to pickle
-            with open('statistics.pkl', 'wb') as f:
+            filename = 'statistics.pkl'
+            with open(filename, 'wb') as f:
                 pickle.dump(Statistic, f)
-                print("Saved to %s" % 'statistics.pkl')
+                print("Saved to %s" % filename)
+            if IN_COLAB and upload_to_drive_count % 5 == 0:
+                upload_to_drive_count += 1
+                if create_file:
+                    stat_pkl = drive.CreateFile()
+                    stat_pkl.SetContentFile(filename)
+                    stat_pkl.Upload()
+                    id = stat_pkl['id']
+                    create_file = False
+                else:
+                    stat_pkl = drive.CreateFile({'id': id})
+                    stat_pkl.SetContentFile(filename)
+                    stat_pkl.Upload()
+                print("Uploaded to drive")
