@@ -296,8 +296,8 @@ def dqn_learing(
             tar_val = torch.addcmul(rew_batch, gamma, 1-done_mask.type(dtype), tar_val_t)
 
             # 3.b error calculate
-            # d_error = (tar_val - val.squeeze()).clamp_(-1, 1) * -1.
-            d_error = torch.pow((tar_val - val.squeeze()).clamp_(-1, 1), 2) * -1.
+            d_error = (tar_val - val.squeeze()).clamp_(-1, 1) * -1.
+            # d_error = torch.pow((tar_val - val.squeeze()).clamp_(-1, 1), 2) * -1.
 
             # 3.c train Q network
             optimizer.zero_grad()
