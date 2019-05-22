@@ -106,7 +106,12 @@ def dqn_learing(
     """
     assert type(env.observation_space) == gym.spaces.Box
     assert type(env.action_space)      == gym.spaces.Discrete
-
+    Statistic['parameters'] = {'replay_buffer_size':replay_buffer_size,
+                               'batch_size':batch_size,
+                               'gamma':gamma,
+                               'learning_starts':learning_starts,
+                               'learning_freq':learning_freq,
+                               'target_update_freq':target_update_freq}
     ###############
     # BUILD MODEL #
     ###############
@@ -182,7 +187,6 @@ def dqn_learing(
             drive = GoogleDrive(gauth)
         except:
             pass
-        create_file = True
 
     iter_time = time()
 
@@ -334,20 +338,15 @@ def dqn_learing(
             sys.stdout.flush()
 
             # Dump statistics to pickle
+            filename = f"{t}" + 'statistics.pkl' if IN_COLAB else 'statistics.pkl'
             with open(filename, 'wb') as f:
                 pickle.dump(Statistic, f)
                 print("Saved to %s" % filename)
-            if IN_COLAB and t % (LOG_EVERY_N_STEPS * 5) == 0:
+            if IN_COLAB and t % (LOG_EVERY_N_STEPS * 10) == 0:
                 try:
-                    if create_file:
-                        create_file = False
-                        stat_pkl = drive.CreateFile()
-                        stat_pkl.SetContentFile(filename)
-                    else:
-                        stat_pkl = drive.CreateFile({'id': id})
+                    stat_pkl = drive.CreateFile()
                     stat_pkl.SetContentFile(filename)
                     stat_pkl.Upload()
-                    id = stat_pkl['id']
                     print("Uploaded to drive")
                 except Exception:
                     print("Exception during upload to drive")
