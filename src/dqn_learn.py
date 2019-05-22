@@ -111,7 +111,8 @@ def dqn_learing(
                                'gamma':gamma,
                                'learning_starts':learning_starts,
                                'learning_freq':learning_freq,
-                               'target_update_freq':target_update_freq}
+                               'target_update_freq':target_update_freq,
+                               'name':env.env.unwrapped.spec.id}
     ###############
     # BUILD MODEL #
     ###############
