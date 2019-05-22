@@ -169,16 +169,19 @@ def dqn_learing(
 
     if IN_COLAB:
         run_in_colab_message()
-        from google.colab import auth
-        import logging
-        from pydrive.auth import GoogleAuth
-        from pydrive.drive import GoogleDrive
-        from oauth2client.client import GoogleCredentials
-        logging.getLogger('googleapicliet.discovery_cache').setLevel(logging.ERROR)
-        auth.authenticate_user()
-        gauth = GoogleAuth()
-        gauth.credentials = GoogleCredentials.get_application_default()
-        drive = GoogleDrive(gauth)
+        try:
+            from google.colab import auth
+            import logging
+            from pydrive.auth import GoogleAuth
+            from pydrive.drive import GoogleDrive
+            from oauth2client.client import GoogleCredentials
+            logging.getLogger('googleapicliet.discovery_cache').setLevel(logging.ERROR)
+            auth.authenticate_user()
+            gauth = GoogleAuth()
+            gauth.credentials = GoogleCredentials.get_application_default()
+            drive = GoogleDrive(gauth)
+        except:
+            pass
         create_file = True
 
     iter_time = time()
@@ -334,14 +337,18 @@ def dqn_learing(
             with open(filename, 'wb') as f:
                 pickle.dump(Statistic, f)
                 print("Saved to %s" % filename)
-        if IN_COLAB and t % (LOG_EVERY_N_STEPS * 5) == 0:
-            if create_file:
-                create_file = False
-                stat_pkl = drive.CreateFile()
-                stat_pkl.SetContentFile(filename)
-            else:
-                stat_pkl = drive.CreateFile({'id': id})
-            stat_pkl.SetContentFile(filename)
-            stat_pkl.Upload()
-            id = stat_pkl['id']
-            print("Uploaded to drive")
+            if IN_COLAB and t % (LOG_EVERY_N_STEPS * 5) == 0:
+                try:
+                    if create_file:
+                        create_file = False
+                        stat_pkl = drive.CreateFile()
+                        stat_pkl.SetContentFile(filename)
+                    else:
+                        stat_pkl = drive.CreateFile({'id': id})
+                    stat_pkl.SetContentFile(filename)
+                    stat_pkl.Upload()
+                    id = stat_pkl['id']
+                    print("Uploaded to drive")
+                except Exception:
+                    print("Exception during upload to drive")
+
