@@ -1,5 +1,6 @@
 import gym
 import torch.optim as optim
+import numpy as np
 
 from dqn_model import DQN
 from dqn_learn import OptimizerSpec, dqn_learing
@@ -54,7 +55,8 @@ if __name__ == '__main__':
     task = benchmark.tasks[3]
 
     # Run training
-    seed = 42 # Use a seed of zero (you may want to randomize the seed!)
+    seed = np.random.randint(10000) # Use a seed of zero (you may want to randomize the seed!)
+    print (f"SEED NUMBER = {seed}")
     env = get_env(task, seed)
 
     main(env, task.max_timesteps)
