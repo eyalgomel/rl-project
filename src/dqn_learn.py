@@ -109,6 +109,7 @@ def dqn_learing(
     Statistic['parameters'] = {'replay_buffer_size':replay_buffer_size,
                                'batch_size':batch_size,
                                'gamma':gamma,
+                               'frame_history_len':frame_history_len,
                                'learning_starts':learning_starts,
                                'learning_freq':learning_freq,
                                'target_update_freq':target_update_freq,
