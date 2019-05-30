@@ -168,11 +168,11 @@ def dqn_learing(
     filename = 'statistics.pkl'
 
     # Google Drive
-    try:
-        import google.colab
-        IN_COLAB = True
-    except:
-        IN_COLAB = False
+    # try:
+    #     import google.colab
+    #     IN_COLAB = True
+    # except:
+    IN_COLAB = False
 
     if IN_COLAB:
         run_in_colab_message()
@@ -353,3 +353,9 @@ def dqn_learing(
                 except Exception:
                     print("Exception during upload to drive")
 
+
+        if t % 500000 == 0 and t > learning_starts:
+            filename = f"{t}" + 'statistics.pkl'
+            with open(filename, 'wb') as f:
+                pickle.dump(Statistic, f)
+                print("Saved to %s" % filename)
